@@ -16,37 +16,37 @@ help: ## Mostra esta ajuda
 	@echo ""
 
 init: ## Inicializa os submodules
-	@./start.sh start
+	@./services.sh start
 
 start: ## Inicia todos os serviços
-	@./start.sh start
+	@./services.sh start
 
 stop: ## Para todos os serviços
-	@./start.sh stop
+	@./services.sh stop
 
 restart: ## Reinicia todos os serviços
-	@./start.sh restart
+	@./services.sh restart
 
 rebuild: ## Reconstrói e inicia os serviços
-	@./start.sh rebuild
+	@./services.sh rebuild
 
 status: ## Mostra o status dos serviços
-	@./start.sh status
+	@./services.sh status
 
 logs: ## Mostra logs de todos os serviços
-	@./start.sh logs
+	@./services.sh logs
 
 logs-backend: ## Mostra logs do backend
-	@./start.sh logs backend
+	@./services.sh logs backend
 
 logs-frontend: ## Mostra logs do frontend
-	@./start.sh logs frontend
+	@./services.sh logs frontend
 
 logs-db: ## Mostra logs do banco de dados
-	@./start.sh logs db
+	@./services.sh logs db
 
 update: ## Atualiza os submodules
-	@./start.sh update
+	@./services.sh update
 
 clean: ## Remove containers, volumes e orphans
-	@./start.sh clean
+	@./services.sh clean

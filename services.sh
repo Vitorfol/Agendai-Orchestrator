@@ -39,8 +39,8 @@ check_docker() {
 init_submodules() {
     print_message "$BLUE" "📦 Verificando submodules..."
     
-    # Verifica se os submodules existem e não estão vazios
-    if [ ! -d "backend/.git" ] || [ ! -d "frontend/.git" ]; then
+    # Verifica se os submodules existem (pode ser arquivo ou diretório .git)
+    if [ ! -e "backend/.git" ] || [ ! -e "frontend/.git" ]; then
         if [ ! -f ".gitmodules" ]; then
             print_message "$RED" "❌ Arquivo .gitmodules não encontrado!"
             print_message "$YELLOW" "Execute: git submodule add <url> para adicionar os submodules"
@@ -51,7 +51,7 @@ init_submodules() {
         git submodule init
         git submodule update --init --recursive
         
-        if [ ! -d "backend/.git" ] || [ ! -d "frontend/.git" ]; then
+        if [ ! -e "backend/.git" ] || [ ! -e "frontend/.git" ]; then
             print_message "$RED" "❌ Erro ao clonar submodules!"
             print_message "$YELLOW" "Certifique-se de ter as permissões necessárias nos repositórios:"
             print_message "$YELLOW" "  - https://github.com/Vitorfol/Agendai-APS"
@@ -76,61 +76,78 @@ update_submodules() {
 start_services() {
     print_message "$BLUE" "🚀 Iniciando serviços..."
     
-    # Configura e inicia o backend usando o script setup.sh (inclui banco de dados)
-    if [ -f "backend/src/scripts/setup.sh" ]; then
+    # Configura e inicia o backend usando o script setup.sh (inclui banco de dados na porta 3307)
+    if [ -f "backend/backend/scripts/setup.sh" ]; then
         print_message "$BLUE" "🔧 Configurando backend e banco de dados..."
-        cd backend/src/scripts
+        cd backend/backend/scripts
         chmod +x setup.sh
         ./setup.sh --down --init
         cd ../../..
-        print_message "$GREEN" "✅ Backend e banco de dados configurados!"
+        print_message "$GREEN" "✅ Backend (porta 8000) e banco de dados (porta 3307) configurados!"
     else
-        print_message "$YELLOW" "⚠️  Script setup.sh do backend não encontrado, usando docker-compose..."
-        # Fallback: inicia banco e backend via docker-compose
-        if command -v docker-compose &> /dev/null; then
-            docker-compose up -d db backend
-        else
-            docker compose up -d db backend
-        fi
+        print_message "$RED" "❌ Script setup.sh não encontrado em backend/backend/scripts/"
+        print_message "$YELLOW" "Verifique se o submodule foi clonado corretamente."
+        exit 1
     fi
     
-    # Inicia o frontend
+    # Inicia o frontend usando seu próprio docker-compose
     print_message "$BLUE" "🎨 Iniciando frontend..."
+    cd frontend
+    
+    # Para e remove container existente se houver
     if command -v docker-compose &> /dev/null; then
-        docker-compose up -d frontend
+        docker-compose down 2>/dev/null
+        docker-compose up -d
     else
-        docker compose up -d frontend
+        docker compose down 2>/dev/null
+        docker compose up -d
     fi
     
     if [ $? -eq 0 ]; then
-        print_message "$GREEN" "✅ Serviços iniciados com sucesso!"
+        cd ..
+        print_message "$GREEN" "✅ Frontend iniciado na porta 80!"
+        
         print_message "$BLUE" "📊 Status dos serviços:"
-        if command -v docker-compose &> /dev/null; then
-            docker-compose ps
-        else
-            docker compose ps
-        fi
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep agendai
+        
         print_message "$GREEN" "\n🌐 Serviços disponíveis:"
-        print_message "$GREEN" "   Frontend: http://localhost:3000"
+        print_message "$GREEN" "   Frontend: http://localhost (porta 80)"
         print_message "$GREEN" "   Backend:  http://localhost:8000"
-        print_message "$GREEN" "   Database: localhost:5432"
+        print_message "$GREEN" "   Database: localhost:3307"
     else
-        print_message "$RED" "❌ Erro ao iniciar serviços."
+        cd ..
+        print_message "$RED" "❌ Erro ao iniciar frontend."
         exit 1
     fi
 }
 
-# Função para parar os serviços
+# Função para parar os serviços (faz 'down' sem '-v' — remove containers, preserva volumes)
 stop_services() {
-    print_message "$YELLOW" "🛑 Parando serviços..."
-    
-    if command -v docker-compose &> /dev/null; then
-        docker-compose down
-    else
-        docker compose down
+    print_message "$YELLOW" "🛑 Parando serviços (down sem -v)..."
+
+    # Frontend: executar 'down' sem -v
+    if [ -d "frontend" ]; then
+        cd frontend
+        if command -v docker-compose &> /dev/null; then
+            docker-compose down 2>/dev/null || true
+        else
+            docker compose down 2>/dev/null || true
+        fi
+        cd ..
     fi
-    
-    print_message "$GREEN" "✅ Serviços parados com sucesso!"
+
+    # Backend e DB: executar 'down' sem -v no backend
+    if [ -d "backend/backend" ]; then
+        cd backend/backend
+        if command -v docker-compose &> /dev/null; then
+            docker-compose down 2>/dev/null || true
+        else
+            docker compose down 2>/dev/null || true
+        fi
+        cd ../../
+    fi
+
+    print_message "$GREEN" "✅ Serviços parados (containers removidos, volumes preservados)!"
 }
 
 # Função para reiniciar os serviços
@@ -197,34 +214,49 @@ show_status() {
     fi
 }
 
+# Função para mostrar status dos submodules
+submodule_status() {
+    print_message "$BLUE" "📦 Status dos Submodules:"
+    git submodule status
+    
+    print_message "$BLUE" "\n📌 Branches atuais:"
+    cd backend && print_message "$YELLOW" "Backend: $(git branch --show-current)" && cd ..
+    cd frontend && print_message "$YELLOW" "Frontend: $(git branch --show-current)" && cd ..
+}
+
 # Função de ajuda
 show_help() {
-    echo "
+        echo "
 ╔═══════════════════════════════════════════════════════════╗
 ║            🚀 Agendai Orchestrator - Ajuda               ║
 ╚═══════════════════════════════════════════════════════════╝
 
-Uso: ./start.sh [comando]
+Uso: ./services.sh [comando]
 
 Comandos disponíveis:
 
-  start         Inicializa submodules e inicia todos os serviços
-  stop          Para todos os serviços
-  restart       Reinicia todos os serviços
-  rebuild       Reconstrói e inicia os serviços
-  status        Mostra o status dos serviços
-  logs [serviço] Mostra logs (todos ou de um serviço específico)
-                Serviços: backend, frontend, db
-  update        Atualiza os submodules para a versão mais recente
-  clean         Remove todos os containers, volumes e orphans
-  help          Mostra esta mensagem de ajuda
+    start         Inicializa submodules e inicia todos os serviços
+    stop          Para todos os serviços
+    restart       Reinicia todos os serviços
+    rebuild       Reconstrói e inicia os serviços
+    status        Mostra o status dos serviços
+    submodules    Mostra status e branches dos submodules
+    logs [serviço] Mostra logs (todos ou de um serviço específico)
+                                Serviços: backend, frontend, db
+    update        Atualiza os submodules para a versão mais recente
+    clean         Remove todos os containers, volumes e orphans
+    help          Mostra esta mensagem de ajuda
 
 Exemplos:
 
-  ./start.sh start           # Inicia todo o ambiente
-  ./start.sh logs backend    # Mostra logs do backend
-  ./start.sh logs            # Mostra logs de todos os serviços
-  ./start.sh rebuild         # Reconstrói as imagens
+    ./services.sh start           # Inicia todo o ambiente
+    ./services.sh logs backend    # Mostra logs do backend
+    ./services.sh submodules      # Ver branches dos submodules
+    ./services.sh update          # Atualizar submodules
+    ./services.sh rebuild         # Reconstrói as imagens
+
+Para mais informações sobre gerenciar submodules:
+    cat SUBMODULES-WORKFLOW.md
 
 "
 }
@@ -258,6 +290,9 @@ main() {
             ;;
         status)
             show_status
+            ;;
+        submodules|sub)
+            submodule_status
             ;;
         logs)
             show_logs "$2"
