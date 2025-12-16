@@ -69,7 +69,13 @@ init_submodules() {
 update_submodules() {
     print_message "$BLUE" "🔄 Atualizando submodules..."
     git submodule update --remote --recursive
+    # Garante que cada submodule está na branch correta e puxa o código mais recente
+    git submodule foreach 'git checkout $(git config -f $toplevel/.gitmodules submodule.$name.branch || echo main) && git pull'
     print_message "$GREEN" "✅ Submodules atualizados com sucesso!"
+
+    # Reconstrói os serviços para garantir que containers usem o código atualizado
+    print_message "$BLUE" "🔧 Aplicando build dos serviços (rebuild)..."
+    rebuild_services
 }
 
 # Função para iniciar os serviços
@@ -192,15 +198,40 @@ clean_all() {
 
 # Função para rebuild
 rebuild_services() {
-    print_message "$BLUE" "🔨 Reconstruindo serviços..."
+    print_message "$BLUE" "🔨 Reconstruindo serviços com código atualizado..."
     
+    # Para todos os serviços
+    stop_services
+    
+    # Rebuild backend
+    print_message "$BLUE" "🔧 Reconstruindo backend..."
+    cd backend/backend
     if command -v docker-compose &> /dev/null; then
         docker-compose up -d --build
     else
         docker compose up -d --build
     fi
+    cd ../..
+    
+    # Rebuild frontend
+    print_message "$BLUE" "🎨 Reconstruindo frontend..."
+    cd frontend
+    if command -v docker-compose &> /dev/null; then
+        docker-compose up -d --build
+    else
+        docker compose up -d --build
+    fi
+    cd ..
     
     print_message "$GREEN" "✅ Serviços reconstruídos com sucesso!"
+    
+    print_message "$BLUE" "📊 Status dos serviços:"
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep agendai
+    
+    print_message "$GREEN" "\n🌐 Serviços disponíveis:"
+    print_message "$GREEN" "   Frontend: http://localhost (porta 80)"
+    print_message "$GREEN" "   Backend:  http://localhost:8000"
+    print_message "$GREEN" "   Database: localhost:3307"
 }
 
 # Função para mostrar status
