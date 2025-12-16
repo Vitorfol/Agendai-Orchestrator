@@ -49,6 +49,34 @@ cd Agendai-Orchestrator
 git submodule update --init --recursive
 ```
 
+### Quickstart (clone do zero -> rodando)
+
+Se você está clonando este repositório do zero e quer deixá‑lo rodando rapidamente, siga estes passos:
+
+```bash
+# 1. Clone com submodules (recomendado)
+git clone --recurse-submodules <URL_DESTE_REPOSITORIO>
+cd Agendai-Orchestrator
+
+# 2. Garantir que .gitmodules seja aplicado (atualiza submodules conforme branches configuradas)
+./services.sh update
+
+# 3. Iniciar os serviços
+./services.sh start
+```
+
+Notas:
+- `./services.sh update` executa `git submodule update --remote --recursive` e faz os submodules seguirem as branches configuradas em `.gitmodules`.
+- Os arquivos `.env` ficam dentro dos submodules (`backend/.env`, `frontend/.env`); o arquivo de exemplo do orquestrador foi removido.
+- Após `./services.sh update`, commit no repo orquestrador para registrar as novas referências dos submodules:
+
+```bash
+git add backend frontend
+git commit -m "Update submodules to match .gitmodules"
+git push
+```
+
+
 ### 2️⃣ Verificar Estrutura
 
 Após o clone, você deve ter:
