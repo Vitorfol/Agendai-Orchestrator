@@ -129,31 +129,41 @@ start_services() {
 
 # Função para parar os serviços (faz 'down' sem '-v' — remove containers, preserva volumes)
 stop_services() {
-    print_message "$YELLOW" "🛑 Parando serviços (down sem -v)..."
+    print_message "$YELLOW" "🛑 Parando serviços e removendo imagens relacionadas..."
 
-    # Frontend: executar 'down' sem -v
+    # Frontend: executar 'down' e remover container
     if [ -d "frontend" ]; then
         cd frontend
         if command -v docker-compose &> /dev/null; then
-            docker-compose down 2>/dev/null || true
+            docker-compose down --remove-orphans 2>/dev/null || true
         else
-            docker compose down 2>/dev/null || true
+            docker compose down --remove-orphans 2>/dev/null || true
         fi
         cd ..
     fi
 
-    # Backend e DB: executar 'down' sem -v no backend
+    # Backend e DB: executar 'down' no backend
     if [ -d "backend/backend" ]; then
         cd backend/backend
         if command -v docker-compose &> /dev/null; then
-            docker-compose down 2>/dev/null || true
+            docker-compose down --remove-orphans 2>/dev/null || true
         else
-            docker compose down 2>/dev/null || true
+            docker compose down --remove-orphans 2>/dev/null || true
         fi
         cd ../../
     fi
 
-    print_message "$GREEN" "✅ Serviços parados (containers removidos, volumes preservados)!"
+    # Remove imagens relacionadas ao projeto (se existirem)
+    print_message "$BLUE" "🧹 Removendo imagens do projeto (se existirem)..."
+    IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk '/(agendai-frontend|agendai-orchestrator-frontend|backend-backend|frontend-frontend|agendai-orchestrator-backend)/ {print $2}')
+    if [ -n "$IMAGES" ]; then
+        echo "$IMAGES" | xargs -r docker rmi -f || true
+        print_message "$GREEN" "✅ Imagens removidas."
+    else
+        print_message "$YELLOW" "Nenhuma imagem correspondente encontrada."
+    fi
+
+    print_message "$GREEN" "✅ Serviços parados; volumes preservados."
 }
 
 # Função para reiniciar os serviços
@@ -206,10 +216,17 @@ rebuild_services() {
     # Rebuild backend
     print_message "$BLUE" "🔧 Reconstruindo backend..."
     cd backend/backend
-    if command -v docker-compose &> /dev/null; then
-        docker-compose up -d --build
+    # Prefer running the setup script which does down -v, up -d, migrations and seeds
+    if [ -f "scripts/setup.sh" ]; then
+        print_message "$BLUE" "🔧 Executando backend setup (down -v + init)..."
+        chmod +x scripts/setup.sh || true
+        ./scripts/setup.sh --down --init || print_message "$YELLOW" "Aviso: setup.sh retornou erro"
     else
-        docker compose up -d --build
+        if command -v docker-compose &> /dev/null; then
+            docker-compose up -d --build
+        else
+            docker compose up -d --build
+        fi
     fi
     cd ../..
     
